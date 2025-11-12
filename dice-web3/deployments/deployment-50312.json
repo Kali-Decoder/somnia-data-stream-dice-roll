@@ -1,0 +1,21 @@
+{
+  "contractName": "DiceMania",
+  "contractAddress": "0xAaa5A304a3b2fFC96149f18988B3f7bBc5179F08",
+  "network": {
+    "name": "somniaTestnet",
+    "chainId": "50312"
+  },
+  "deployer": {
+    "address": "0xdAF0182De86F904918Db8d07c7340A1EfcDF8244"
+  },
+  "owner": "0xdAF0182De86F904918Db8d07c7340A1EfcDF8244",
+  "deploymentInfo": {
+    "timestamp": "2025-11-10T09:19:22.840Z",
+    "blockNumber": "224967801"
+  },
+  "contractConfig": {
+    "initialPoolId": "0",
+    "pointsPerBet": "10",
+    "pointsPerWin": "50"
+  }
+}
