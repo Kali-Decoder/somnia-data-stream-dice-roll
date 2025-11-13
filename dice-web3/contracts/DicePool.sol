@@ -8,6 +8,9 @@ contract DiceMania {
     // Points constants
     uint256 public constant POINTS_PER_BET = 10;
     uint256 public constant POINTS_PER_WIN = 50;
+    
+    // Pool duration constant - 10 minutes in seconds
+    uint256 public constant POOL_DURATION = 600; // 10 minutes
 
     event PoolCreated(uint256 indexed poolId, uint256 endTime, uint256 totalPlayers, uint256 baseAmount, uint256 startTime);
     event BetPlaced(address indexed user, uint256 indexed poolId, uint256 amount, uint256 targetValue, uint256 totalAmount, uint256 playersLeft);
@@ -43,9 +46,21 @@ contract DiceMania {
     mapping(uint256 => DicePool) private pools;
     mapping(uint256 => DicePlayer[]) private bets;
     mapping(address => uint256) public userPoints;
+    
+    // Stats tracking
+    uint256 public totalUsers;
+    uint256 public totalBetsPlaced;
+    uint256 public totalPoolsCreated;
+    uint256 public totalPointsAwarded;
+    address[] public allUsers; // Track all unique users
+    mapping(address => bool) public isUserRegistered; // Track if user is registered
 
     constructor() {
         owner = msg.sender;
+        totalPoolsCreated = 0;
+        totalBetsPlaced = 0;
+        totalUsers = 0;
+        totalPointsAwarded = 0;
     }
 
     modifier onlyOwner() {
@@ -53,7 +68,7 @@ contract DiceMania {
         _;
     }
 
-    function createPool(uint256 _endTime, uint256 _totalPlayers,uint256 _baseamount)
+    function createPool(uint256 _totalPlayers, uint256 _baseamount)
         external
         onlyOwner
     {
@@ -63,10 +78,11 @@ contract DiceMania {
         pools[currentPoolId].playersLeft = _totalPlayers;
         pools[currentPoolId].ended = false;
         pools[currentPoolId].starttime = block.timestamp;
-        pools[currentPoolId].baseamount= _baseamount;
-        pools[currentPoolId].endtime = block.timestamp + _endTime;
+        pools[currentPoolId].baseamount = _baseamount;
+        pools[currentPoolId].endtime = block.timestamp + POOL_DURATION; 
         unchecked {
             poolId += 1;
+            totalPoolsCreated += 1;
         }
         emit PoolCreated(currentPoolId, pools[currentPoolId].endtime, _totalPlayers, _baseamount, pools[currentPoolId].starttime);
     }
@@ -108,6 +124,16 @@ contract DiceMania {
 
         unchecked {
             pools[_poolId].playersLeft -= 1;
+            totalBetsPlaced += 1;
+        }
+        
+        // Track unique users
+        if (!isUserRegistered[msg.sender]) {
+            allUsers.push(msg.sender);
+            isUserRegistered[msg.sender] = true;
+            unchecked {
+                totalUsers += 1;
+            }
         }
         
         emit BetPlaced(msg.sender, _poolId, _amount, _targetValue, pools[_poolId].totalamount, pools[_poolId].playersLeft);
@@ -115,6 +141,7 @@ contract DiceMania {
         // Award points for placing a bet
         unchecked {
             userPoints[msg.sender] += POINTS_PER_BET;
+            totalPointsAwarded += POINTS_PER_BET;
         }
         emit PointsAwarded(msg.sender, POINTS_PER_BET, userPoints[msg.sender], "Bet Placed");
     }
@@ -166,6 +193,7 @@ contract DiceMania {
         if (reward > 0) {
             unchecked {
                 userPoints[msg.sender] += POINTS_PER_WIN;
+                totalPointsAwarded += POINTS_PER_WIN;
             }
             emit PointsAwarded(msg.sender, POINTS_PER_WIN, userPoints[msg.sender], "Bet Won");
         }
@@ -241,5 +269,67 @@ contract DiceMania {
     // Function to get user points
     function getUserPoints(address _user) external view returns (uint256) {
         return userPoints[_user];
+    }
+    
+    // Function to get stats
+    function getStats() external view returns (
+        uint256 _totalUsers,
+        uint256 _totalBetsPlaced,
+        uint256 _totalPoolsCreated,
+        uint256 _totalPointsAwarded
+    ) {
+        return (totalUsers, totalBetsPlaced, totalPoolsCreated, totalPointsAwarded);
+    }
+    
+    // Function to get leaderboard - returns top N users by points
+    // Note: This is gas-intensive for large user bases. Consider using events for off-chain indexing.
+    function getLeaderboard(uint256 _limit) external view returns (
+        address[] memory addresses,
+        uint256[] memory points
+    ) {
+        uint256 userCount = allUsers.length;
+        uint256 limit = _limit > userCount ? userCount : _limit;
+        
+        address[] memory topAddresses = new address[](limit);
+        uint256[] memory topPoints = new uint256[](limit);
+        
+        // Create array of user-point pairs
+        address[] memory sortedUsers = new address[](userCount);
+        uint256[] memory sortedPoints = new uint256[](userCount);
+        
+        for (uint256 i = 0; i < userCount; i++) {
+            sortedUsers[i] = allUsers[i];
+            sortedPoints[i] = userPoints[allUsers[i]];
+        }
+        
+        // Simple bubble sort (for small datasets) - in production, use off-chain indexing
+        for (uint256 i = 0; i < userCount; i++) {
+            for (uint256 j = 0; j < userCount - i - 1; j++) {
+                if (sortedPoints[j] < sortedPoints[j + 1]) {
+                    // Swap points
+                    uint256 tempPoints = sortedPoints[j];
+                    sortedPoints[j] = sortedPoints[j + 1];
+                    sortedPoints[j + 1] = tempPoints;
+                    
+                    // Swap addresses
+                    address tempAddr = sortedUsers[j];
+                    sortedUsers[j] = sortedUsers[j + 1];
+                    sortedUsers[j + 1] = tempAddr;
+                }
+            }
+        }
+        
+        // Return top N
+        for (uint256 i = 0; i < limit; i++) {
+            topAddresses[i] = sortedUsers[i];
+            topPoints[i] = sortedPoints[i];
+        }
+        
+        return (topAddresses, topPoints);
+    }
+    
+    // Function to get total number of users
+    function getTotalUsers() external view returns (uint256) {
+        return totalUsers;
     }
 }
